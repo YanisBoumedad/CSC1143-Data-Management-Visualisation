@@ -1,0 +1,15 @@
+# Fichiers à exclure du déploiement Cloud Functions
+README.md
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.git/
+.gitignore

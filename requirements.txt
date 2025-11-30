@@ -1,0 +1,30 @@
+# Requirements pour le projet CSC1142 - Data Analytics Pipeline
+# Python 3.9+
+
+# Google Cloud
+google-cloud-storage==2.14.0
+google-cloud-dataproc==5.8.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.2
+pyarrow==14.0.1
+
+# HTTP Requests
+requests==2.31.0
+
+# PySpark (pour développement local)
+pyspark==3.5.0
+
+# Visualization
+streamlit==1.29.0
+streamlit-folium>=0.15.0
+plotly==5.18.0
+folium>=0.15.0
+
+# Utilities
+python-dateutil==2.8.2
+
+# Development
+pytest==7.4.3
+jupyter==1.0.0
