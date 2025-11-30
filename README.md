@@ -69,11 +69,6 @@ Regional Disparities:
 │ (visualization/) │  - Choropleth map by department
 └──────────────────┘  - Time series charts
                       - Regional comparative analysis
-
-┌──────────────────┐
-│ Parquet Viewers  │  Python CLI scripts (parquet_viewers/)
-│ (parquet_viewers)│  - view_all.py (interactive menu)
-└──────────────────┘  - Scripts per aggregation type
 ```
 
 ## Main Components
@@ -99,7 +94,60 @@ gs://csc1142-projet/raw/carburants/
 └── carburants_YYYYMMDD_HHMMSS.json
 ```
 
-### 2. Spark Processing (`spark_jobs/`)
+### 2. Cloud Functions (`cloud_functions/`)
+
+**Role**: Serverless automatic data ingestion with scheduled execution
+
+**Architecture**:
+```
+Cloud Scheduler (daily cron at 2am)
+         ↓ HTTP POST
+Cloud Function (ingest-carburants-daily)
+         ↓ fetch
+Government API (data.gouv.fr)
+         ↓ process + enrich
+Google Cloud Storage (gs://csc1142-projet/raw/carburants/)
+```
+
+**Key Features**:
+- **Serverless**: No server infrastructure to manage
+- **Automated**: Daily execution via Cloud Scheduler (2:00 AM Paris time)
+- **Cost-effective**: Pay-per-use model (~€0.82/month)
+- **Scalable**: Automatic scaling based on demand
+- **Resilient**: Built-in retry mechanism on failure
+
+**Components**:
+- `data_ingestion_function/main.py`: Cloud Function entry point
+- `deploy_all.sh`: Automated deployment script
+- Cloud Scheduler job: `ingest-carburants-scheduler`
+
+**Deployment**:
+```bash
+# From project root
+./cloud_functions/deploy_all.sh
+```
+
+**Monitoring**:
+```bash
+# View logs
+gcloud functions logs read ingest-carburants-daily \
+  --region=europe-west1 --gen2 --limit=50
+
+# Test manually
+gcloud scheduler jobs run ingest-carburants-scheduler \
+  --location=europe-west1
+```
+
+**Configuration**:
+- Runtime: Python 3.11
+- Memory: 2GB
+- Timeout: 540s (9 minutes)
+- Region: europe-west1
+- Service Account: `data-ingestion-sa@regal-sun-478114-q5.iam.gserviceaccount.com`
+
+For detailed documentation, see [Cloud Functions README](cloud_functions/README.md).
+
+### 3. Spark Processing (`spark_jobs/`)
 
 **Role**: Complete ETL transformation from raw data to optimized datasets
 
@@ -184,6 +232,50 @@ gs://csc1142-projet/processed/carburants/
 - Intelligent partitioning for fast filtering
 - DataFrame caching for multiple aggregations
 - Broadcast Joins for reference tables
+
+### 4. Visualization Dashboard (`visualization/`)
+
+**Role**: Interactive web application for fuel price analysis and exploration
+
+**Technology**: Streamlit with Plotly and Folium
+
+**Key Features**:
+- **Real-time data loading**: Direct access to processed Parquet files from GCS
+- **Interactive visualizations**: Dynamic charts with filtering and zoom capabilities
+- **Multiple views**:
+  - Overview dashboard with key metrics
+  - Temporal evolution analysis with customizable fuel selection
+  - Regional comparison maps with color-coded pricing
+  - Interactive radar charts for multi-region comparison
+  - Top/Bottom stations ranking
+  - Detailed statistics with distribution analysis
+
+**Main Components**:
+- `dashboard.py`: Main Streamlit application with multi-page navigation
+- `charts.py`: Plotly chart creation functions
+- `maps.py`: Interactive map visualizations with Folium
+- `load_data.py`: Data loading utilities with caching
+- `carte_prix_carburants.py`: Standalone choropleth map generator
+
+**Launch Dashboard**:
+```bash
+cd visualization
+streamlit run dashboard.py
+```
+
+The dashboard opens automatically at `http://localhost:8501` with:
+- Sidebar navigation for different analysis views
+- Cached data loading for optimal performance
+- Responsive layout adapting to screen size
+- Export functionality for CSV downloads
+
+**Available Views**:
+1. **Vue d'ensemble**: Summary metrics and quick insights
+2. **Évolution temporelle**: Time series analysis with multi-fuel selection
+3. **Carte régionale**: Regional price maps and bar charts
+4. **Comparaisons**: Radar charts and deviation from national average
+5. **Top/Bottom stations**: Rankings of most/least expensive stations
+6. **Statistiques**: Detailed statistics, distributions, and data export
 
 
 
@@ -281,21 +373,25 @@ gcloud dataproc clusters create csc1142-spark-cluster \
 ### Complete pipeline (recommended)
 
 ```bash
-# 1. Data ingestion
+# 1. Automated data ingestion (Cloud Functions + Scheduler)
+./cloud_functions/deploy_all.sh  # Deploy once
+gcloud scheduler jobs run ingest-carburants-scheduler --location=europe-west1
+
+# OR Manual ingestion
 python data_ingestion/fetch_carburants.py
 
-# 2. Upload Spark scripts to GCS
+# 2. Upload Spark scripts to GCS and run processing
 gsutil cp spark_jobs/*.py gs://csc1142-projet/scripts/
 
-# or on Dataproc:
 gcloud dataproc jobs submit pyspark \
   gs://csc1142-projet/scripts/transform_carburants.py \
   --cluster=csc1142-spark-cluster \
   --region=europe-west1 \
   --py-files=gs://csc1142-projet/scripts/utils_spark.py
 
-# 3. CLI exploration:
-python parquet_viewers/view_all.py
+# 3. Launch visualization dashboard
+cd visualization
+streamlit run dashboard.py
 ```
 
 ### Step-by-step execution
@@ -338,22 +434,22 @@ Period covered: 2007 - 2025 (11 years)
 Stations with anomalies: 123
 ```
 
-#### 3. Result visualization
+#### 3. Launch Visualization Dashboard
 
-```
-
-**CLI Scripts**:
 ```bash
-python parquet_viewers/view_all.py
+cd visualization
+streamlit run dashboard.py
 ```
 
-**Direct Pandas queries**:
+The dashboard will open at `http://localhost:8501` with interactive visualizations.
+
+**Direct Data Access** (optional):
 ```python
 import pandas as pd
 
 df = pd.read_parquet("gs://csc1142-projet/processed/carburants/aggregations/by_region/")
 print(df.head())
-print(f"National average price: {df['gazole_moyen'].mean():.3f} €/L")
+print(f"National average price: {df['avg_gazole'].mean():.3f} €/L")
 ```
 
 ## Data Schemas
@@ -385,6 +481,11 @@ Each aggregation contains:
 | PySpark | 3.5.0 | Python Spark API |
 | Google Cloud Storage | - | Cloud storage |
 | Google Cloud Dataproc | 2.2 | Managed Spark clusters |
+| Google Cloud Functions | Gen2 | Serverless automation |
+| Cloud Scheduler | - | Scheduled job execution |
+| Streamlit | 1.29.0 | Interactive dashboards |
+| Plotly | 5.18.0 | Data visualization |
+| Folium | 0.15.0+ | Interactive maps |
 | Pandas | 2.1.4 | Data manipulation |
 | PyArrow | 14.0.1 | Parquet format |
 
@@ -400,9 +501,9 @@ Each aggregation contains:
 
 ## Documentation
 
+- [Cloud Functions Guide](cloud_functions/README.md) - Serverless automation and deployment
 - [Spark Pipeline Guide](spark_jobs/README.md) - Complete technical documentation
-- [Parquet Viewers Guide](parquet_viewers/README.md) - CLI exploration scripts
-- [Dashboard Guide](visualization/README.md) - Streamlit application
+- [Visualization Dashboard](visualization/) - Interactive Streamlit application
 
 ## Maintenance
 
@@ -449,7 +550,7 @@ gcloud dataproc clusters update csc1142-spark-cluster \
 
 ## Authors
 
-Academic project completed as part of the **Cloud Technologies** course - Dublin City University (DCU)
+Yanis Boumedad && Mattéo Duprat
 
 ## License
 
