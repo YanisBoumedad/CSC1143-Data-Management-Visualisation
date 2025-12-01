@@ -29,7 +29,7 @@ from charts import (
 )
 
 st.set_page_config(
-    page_title="Dashboard Carburants France",
+    page_title="Carte Interactive - Prix Carburants France",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -74,7 +74,7 @@ def load_all_data():
 
 
 def main():
-    st.markdown('<h1 class="main-header">Dashboard Prix Carburants France</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Carte Interactive - Prix Carburants France</h1>', unsafe_allow_html=True)
 
     with st.sidebar:
         st.image("https://upload.wikimedia.org/wikipedia/fr/0/0f/Logo_france.svg", width=100)
@@ -82,7 +82,7 @@ def main():
 
         page = st.radio(
             "Choisir une vue:",
-            ["Vue d'ensemble", "Évolution temporelle", "Carte régionale",
+            ["Vue d'ensemble", "Évolution temporelle",
              "Comparaisons", "Top/Bottom stations", "Statistiques"]
         )
 
@@ -101,8 +101,6 @@ def main():
         show_overview(data)
     elif page == "Évolution temporelle":
         show_temporal_evolution(data)
-    elif page == "Carte régionale":
-        show_regional_map(data)
     elif page == "Comparaisons":
         show_comparisons(data)
     elif page == "Top/Bottom stations":
@@ -259,18 +257,11 @@ def show_comparisons(data):
     with col1:
         st.subheader("Radar par région")
         df_region = add_region_names(df_region.copy())
-        regions = df_region[df_region["region_code"] != "99"]["region_name"].unique()
 
-        selected_regions = st.multiselect(
-            "Sélectionner les régions à comparer:",
-            regions,
-            default=list(regions)[:5]
-        )
-
-        if selected_regions:
-            df_filtered = df_region[df_region["region_name"].isin(selected_regions)]
-            fig = create_fuel_comparison_radar(df_filtered)
-            st.plotly_chart(fig, use_container_width=True, key="comparison_radar")
+        # Afficher toutes les régions (sauf code 99)
+        df_filtered = df_region[df_region["region_code"] != "99"]
+        fig = create_fuel_comparison_radar(df_filtered)
+        st.plotly_chart(fig, use_container_width=True, key="comparison_radar")
 
     with col2:
         st.subheader("Heatmap prix")
